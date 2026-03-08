@@ -1,0 +1,9 @@
+{
+  "slug": "retrotype",
+  "created_at": "2026-03-08T16:06:07.979771",
+  "eval_after": "2026-03-09T16:06:07.979771",
+  "idea_name": "RetroType",
+  "hypothesis": "IF users practice for 15 minutes/day on adaptively generated bigram-targeted text with hidden real-time metrics THEN their WPM on a standard typing test improves by \u22655 WPM more than a control group using MonkeyType over 2 weeks.",
+  "falsification_criteria": "If fewer than 30% of recruited users (target: 50 users from r/MechanicalKeyboards) complete 10 of 14 daily sessions, or if the adaptive group's mean improvement is less than 3 WPM above control after 14 days, scrap it.",
+  "experiment_path": "/Users/charliekerfoot/dev/experiments/retrotype"
+}

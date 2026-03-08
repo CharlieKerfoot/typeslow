@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RetroType — Bigram Trainer Experiment</title>
+<style>
+  :root {
+    --bg: #1a1b26;
+    --surface: #24283b;
+    --text: #c0caf5;
+    --text-dim: #565f89;
+    --accent: #7aa2f7;
+    --correct: #9ece6a;
+    --error: #f7768e;
+    --warning: #e0af68;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 2rem;
+  }
+  h1 { color: var(--accent); margin-bottom: 0.25rem; font-size: 1.5rem; }
+  .subtitle { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 2rem; }
+  #app { width: 100%; max-width: 800px; }
+  .phase-label {
+    color: var(--warning);
+    font-size: 0.9rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .phase-desc {
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    margin-bottom: 1.5rem;
+    line-height: 1.5;
+  }
+  .progress-bar-container {
+    width: 100%;
+    height: 6px;
+    background: var(--surface);
+    border-radius: 3px;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+  }
+  .progress-bar {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+  #typing-area {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    min-height: 180px;
+    cursor: text;
+    position: relative;
+  }
+  #typing-area:focus-within { outline: 2px solid var(--accent); }
+  #text-display {
+    font-size: 1.25rem;
+    line-height: 2;
+    letter-spacing: 0.02em;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #text-display .char { color: var(--text-dim); }
+  #text-display .char.correct { color: var(--correct); }
+  #text-display .char.incorrect { color: var(--error); text-decoration: underline; }
+  #text-display .char.current { background: var(--accent); color: var(--bg); border-radius: 2px; }
+  #hidden-input {
+    position: absolute;
+    opacity: 0;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    cursor: text;
+  }
+  .stats-hidden-notice {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    font-style: italic;
+    margin-bottom: 1rem;
+  }
+  .wpm-display {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+  }
+  .wpm-display .wpm-num { color: var(--accent); font-size: 1.5rem; font-weight: bold; }
+  .btn {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    padding: 0.75rem 2rem;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    display: block;
+    margin: 1rem auto;
+    transition: opacity 0.2s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .results-section {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .results-section h3 {
+    color: var(--accent);
+    margin-bottom: 1rem;
+    font-size: 1rem;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+  }
+  th, td {
+    padding: 0.4rem 0.6rem;
+    text-align: left;
+    border-bottom: 1px solid #2f3549;
+  }
+  th { color: var(--text-dim); font-weight: normal; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; }
+  td { color: var(--text); }
+  .improved { color: var(--correct); }
+  .worsened { color: var(--error); }
+  .metric-card {
+    display: inline-block;
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    margin: 0.5rem;
+    text-align: center;
+  }
+  .metric-card .label { color: var(--text-dim); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .metric-card .value { color: var(--accent); font-size: 1.5rem; font-weight: bold; margin-top: 0.25rem; }
+  .metric-card .value.pass { color: var(--correct); }
+  .metric-card .value.fail { color: var(--error); }
+  .criteria-result { padding: 0.5rem; margin: 0.25rem 0; border-radius: 4px; font-size: 0.85rem; }
+  .criteria-result.pass { background: #9ece6a22; border-left: 3px solid var(--correct); }
+  .criteria-result.fail { background: #f7768e22; border-left: 3px solid var(--error); }
+  .copy-btn {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 0.5rem 1.5rem;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: block;
+    margin: 1rem auto;
+  }
+  .intro-screen { text-align: center; padding: 2rem 0; }
+  .intro-screen p { color: var(--text-dim); line-height: 1.7; margin-bottom: 1rem; max-width: 600px; margin-left: auto; margin-right: auto; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<h1>RetroType</h1>
+<div class="subtitle">Adaptive Bigram Trainer — Experiment Build</div>
+<div id="app"></div>
+
+<script>
+// ============================================================
+// CORPUS — calibration and retest passages
+// ============================================================
+const CALIBRATION_PASSAGES = [
+  "The quick brown fox jumps over the lazy dog near the riverbank while the morning sun casts long shadows across the dewy meadow and birds begin their daily chorus of melodies that echo through the quiet village streets.",
+  "Programming requires patience and persistence because debugging complex systems often reveals unexpected interactions between components that seemed perfectly isolated during the initial design phase of the project.",
+  "She walked through the ancient library where dust motes floated in beams of golden light and thousands of leather bound volumes lined the shelves from floor to ceiling each holding stories waiting to be discovered."
+];
+
+const RETEST_PASSAGES = [
+  "The old stone bridge arched gracefully over the stream where children played during summer afternoons and fishermen cast their lines hoping for trout while willow trees swayed gently in the warm breeze.",
+  "Software development involves writing code that machines can execute but humans must also understand which means choosing clear variable names and structuring logic in ways that communicate intent to future readers.",
+  "He opened the wooden chest and found letters written in faded ink describing voyages across distant oceans and encounters with remarkable people whose names had been forgotten by everyone except the author."
+];
+
+// ============================================================
+// ENGLISH BIGRAM FREQUENCIES (approximate, from large corpus)
+// Used to compute oversampling ratio
+// ============================================================
+const COMMON_BIGRAMS = {
+  'th':0.0356,'he':0.0307,'in':0.0243,'er':0.0205,'an':0.0199,
+  're':0.0185,'on':0.0176,'at':0.0149,'en':0.0145,'nd':0.0135,
+  'ti':0.0134,'es':0.0134,'or':0.0128,'te':0.0120,'of':0.0117,
+  'ed':0.0117,'is':0.0113,'it':0.0112,'al':0.0109,'ar':0.0107,
+  'st':0.0105,'to':0.0104,'nt':0.0104,'ng':0.0095,'se':0.0093,
+  'ha':0.0093,'as':0.0087,'ou':0.0087,'io':0.0083,'le':0.0083,
+  've':0.0083,'co':0.0079,'me':0.0079,'de':0.0076,'hi':0.0076,
+  'ri':0.0073,'ro':0.0073,'ic':0.0070,'ne':0.0069,'ea':0.0069,
+  'ra':0.0069,'ce':0.0065,'li':0.0062,'ch':0.0060,'ll':0.0058,
+  'be':0.0058,'ma':0.0057,'si':0.0055,'om':0.0055,'ur':0.0054
+};
+
+// ============================================================
+// WORD LIST for text generation (common English words)
+// ============================================================
+const WORD_BANK = [
+  "the","of","and","to","in","a","is","that","for","it","as","was","with","be","by","on","not","he","this","are",
+  "but","from","or","have","an","they","which","one","you","were","her","all","she","there","would","their","we",
+  "him","been","has","when","who","will","more","no","if","out","so","said","what","up","its","about","into",
+  "than","them","can","only","other","new","some","could","time","these","two","may","then","do","first","any",
+  "my","now","such","like","our","over","man","me","even","most","made","after","also","did","many","before",
+  "must","through","back","years","where","much","your","way","well","down","should","because","each","just",
+  "those","people","how","too","little","state","good","very","make","world","still","own","see","men","work",
+  "long","get","here","between","both","life","being","under","never","day","same","another","know","while",
+  "last","might","great","old","year","off","come","since","against","right","came","take","three","house",
+  "during","found","place","think","water","every","home","small","large","hand","high","keep","left","point",
+  "system","night","next","given","going","nothing","without","until","part","children","real","change","looking",
+  "though","program","within","often","turn","light","along","rather","better","things","quite","rather",
+  "always","enough","together","further","something","morning","question","practice","building","working",
+  "return","matter","different","certain","perhaps","whether","possible","important","several","mother",
+  "father","brother","sister","number","picture","problem","thought","anything","nothing","everything",
+  "kitchen","chapter","machine","strength","weather","gather","rhythm","switch","stretch","through",
+  "phantom","texture","mixture","fixture","capture","venture","culture","structure","feature","nature"
+];
+
+// ============================================================
+// STATE
+// ============================================================
+let state = {
+  phase: 'intro', // intro, calibration, analysis, training, retest, results
+  passageIndex: 0,
+  passages: [],
+  charIndex: 0,
+  keystrokeLog: [],    // {char, time, correct}
+  bigramTimings: {},   // calibration phase
+  retestBigramTimings: {}, // retest phase
+  trainingBigramTimings: {}, // training phase
+  targetBigrams: [],   // top 20 slowest
+  trainingPassages: [],
+  phaseStartTime: 0,
+  phaseKeystrokeLogs: { calibration: [], training: [], retest: [] },
+  lastKeyTime: null,
+  lastChar: null,
+};
+
+const app = document.getElementById('app');
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function getBigrams(text) {
+  const bigrams = {};
+  const lower = text.toLowerCase();
+  for (let i = 0; i < lower.length - 1; i++) {
+    const a = lower[i], b = lower[i+1];
+    if (/[a-z]/.test(a) && /[a-z]/.test(b)) {
+      const bg = a + b;
+      bigrams[bg] = (bigrams[bg] || 0) + 1;
+    }
+  }
+  return bigrams;
+}
+
+function median(arr) {
+  if (arr.length === 0) return 0;
+  const s = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+function computeBigramMedians(keystrokeLogs) {
+  const timings = {};
+  for (const log of keystrokeLogs) {
+    for (let i = 1; i < log.length; i++) {
+      if (!log[i].correct || !log[i-1].correct) continue;
+      const a = log[i-1].char.toLowerCase();
+      const b = log[i].char.toLowerCase();
+      if (/[a-z]/.test(a) && /[a-z]/.test(b)) {
+        const bg = a + b;
+        const dt = log[i].time - log[i-1].time;
+        if (dt > 0 && dt < 2000) { // ignore pauses > 2s
+          if (!timings[bg]) timings[bg] = [];
+          timings[bg].push(dt);
+        }
+      }
+    }
+  }
+  const medians = {};
+  for (const [bg, times] of Object.entries(timings)) {
+    if (times.length >= 2) { // need at least 2 samples
+      medians[bg] = median(times);
+    }
+  }
+  return medians;
+}
+
+function findSlowestBigrams(medians, n = 20) {
+  return Object.entries(medians)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .map(([bg, time]) => ({ bigram: bg, time }));
+}
+
+function overallMedianTime(medians) {
+  const vals = Object.values(medians);
+  return vals.length > 0 ? median(vals) : 150;
+}
+
+// ============================================================
+// TEXT GENERATION — oversample target bigrams
+// ============================================================
+function generateTrainingText(targetBigrams, wordCount = 50) {
+  const targetSet = new Set(targetBigrams.map(b => b.bigram));
+  
+  // Score each word by how many target bigrams it contains
+  function scoreWord(word) {
+    let score = 0;
+    const lw = word.toLowerCase();
+    for (let i = 0; i < lw.length - 1; i++) {
+      if (targetSet.has(lw[i] + lw[i+1])) score++;
+    }
+    return score;
+  }
+  
+  // Build a pool: words with target bigrams are heavily favored
+  const scoredWords = WORD_BANK.map(w => ({ word: w, score: scoreWord(w) }));
+  const highValue = scoredWords.filter(w => w.score >= 1);
+  const filler = scoredWords.filter(w => w.score === 0);
+  
+  const result = [];
+  for (let i = 0; i < wordCount; i++) {
+    // 75% chance of picking a high-value word if available
+    if (highValue.length > 0 && Math.random() < 0.75) {
+      const idx = Math.floor(Math.random() * highValue.length);
+      result.push(highValue[idx].word);
+    } else {
+      const pool = filler.length > 0 ? filler : scoredWords;
+      const idx = Math.floor(Math.random() * pool.length);
+      result.push(pool[idx].word);
+    }
+  }
+  return result.join(' ');
+}
+
+function generateTrainingPassages(targetBigrams, count = 5) {
+  const passages = [];
+  for (let i = 0; i < count; i++) {
+    passages.push(generateTrainingText(targetBigrams, 45 + Math.floor(Math.random() * 15)));
+  }
+  return passages;
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+function render() {
+  switch (state.phase) {
+    case 'intro': renderIntro(); break;
+    case 'calibration': renderTyping('calibration'); break;
+    case 'analysis': renderAnalysis(); break;
+    case 'training': renderTyping('training'); break;
+    case 'retest': renderTyping('retest'); break;
+    case 'results': renderResults(); break;
+  }
+}
+
+function renderIntro() {
+  app.innerHTML = `
+    <div class="intro-screen">
+      <p><strong>Welcome to the RetroType experiment.</strong></p>
+      <p>This will take about 10–15 minutes. You'll type through three phases:</p>
+      <p>
+        <strong>Phase 1 — Calibration:</strong> Type 3 passages normally. We measure your keystroke timing.<br>
+        <strong>Phase 2 — Training:</strong> Type 5 adaptive passages targeting your weak spots. <em>No speed shown.</em><br>
+        <strong>Phase 3 — Retest:</strong> Type 3 more passages. We measure improvement.
+      </p>
+      <p style="color:var(--warning)">⚠ For accurate results, type naturally. Don't try to game it.</p>
+      <button class="btn" onclick="startCalibration()">Begin Calibration →</button>
+    </div>
+  `;
+}
+
+function renderTyping(phase) {
+  const passages = state.passages;
+  const passageNum = state.passageIndex + 1;
+  const totalPassages = passages.length;
+  const text = passages[state.passageIndex];
+  const progress = ((state.passageIndex / totalPassages) * 100).toFixed(0);
+  
+  const phaseLabels = {
+    calibration: 'Phase 1 — Calibration',
+    training: 'Phase 2 — Adaptive Training',
+    retest: 'Phase 3 — Retest'
+  };
+  const phaseDescs = {
+    calibration: `Passage ${passageNum} of ${totalPassages} — Type naturally at your normal speed.`,
+    training: `Passage ${passageNum} of ${totalPassages} — Focus on accuracy and flow. Speed metrics hidden.`,
+    retest: `Passage ${passageNum} of ${totalPassages} — Type naturally, same as calibration.`
+  };
+  
+  let charsHtml = '';
+  for (let i = 0; i < text.length; i++) {
+    let cls = 'char';
+    if (i < state.charIndex) {
+      cls += state.keystrokeLog[i] && state.keystrokeLog[i].correct ? ' correct' : ' incorrect';
+    } else if (i === state.charIndex) {
+      cls += ' current';
+    }
+    const displayChar = text[i] === ' ' ? ' ' : text[i];
+    charsHtml += `<span class="${cls}">${displayChar}</span>`;
+  }
+  
+  const showWpm = phase !== 'training';
+  const wpmHtml = showWpm && state.phaseStartTime > 0 && state.charIndex > 0
+    ? `<div class="wpm-display"><span class="wpm-num">${computeLiveWpm()}</span> WPM</div>`
+    : (phase === 'training' ? '<div class="stats-hidden-notice">🔒 Speed metrics hidden during training</div>' : '');
+  
+  app.innerHTML = `
+    <div class="phase-label">${phaseLabels[phase]}</div>
+    <div class="phase-desc">${phaseDescs[phase]}</div>
+    <div class="progress-bar-container"><div class="progress-bar" style="width:${progress}%"></div></div>
+    ${wpmHtml}
+    <div id="typing-area" onclick="document.getElementById('hidden-input').focus()">
+      <div id="text-display">${charsHtml}</div>
+      <input id="hidden-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+    </div>
+  `;
+  
+  const input = document.getElementById('hidden-input');
+  input.focus();
+  input.addEventListener('keydown', handleKeydown);
+  // Prevent losing focus
+  input.addEventListener('blur', () => setTimeout(() => input.focus(), 50));
+}
+
+function computeLiveWpm() {
+  if (state.charIndex === 0 || state.phaseStartTime === 0) return 0;
+  const elapsed = (performance.now() - state.phaseStartTime) / 1000 / 60; // minutes
+  const words = state.charIndex / 5;
+  return Math.round(words / elapsed);
+}
+
+function renderAnalysis() {
+  const medians = state.bigramTimings;
+  const slowest = state.targetBigrams;
+  const overallMed = overallMedianTime(medians);
+  
+  let tableRows = slowest.map((b, i) => {
+    const ratio = (b.time / overallMed).toFixed(1);
+    return `<tr><td>${i+1}</td><td style="font-size:1.1rem;font-weight:bold;letter-spacing:0.1em">${b.bigram}</td><td>${Math.round(b.time)} ms</td><td>${ratio}x</td></tr>`;
+  }).join('');
+  
+  app.innerHTML = `
+    <div class="phase-label">Analysis Complete</div>
+    <div class="phase-desc">We identified your 20 slowest bigram transitions. Training text will oversample these.</div>
+    <div class="results-section">
+      <h3>Your Slowest Bigrams (vs. ${Math.round(overallMed)} ms overall median)</h3>
+      <table>
+        <tr><th>#</th><th>Bigram</th><th>Median Time</th><th>Ratio</th></tr>
+        ${tableRows}
+      </table>
+    </div>
+    <button class="btn" onclick="startTraining()">Start Adaptive Training →</button>
+  `;
+}
+
+function renderResults() {
+  const calMedians = state.bigramTimings;
+  const retMedians = state.retestBigramTimings;
+  const targetSet = new Set(state.targetBigrams.map(b => b.bigram));
+  const calOverall = overallMedianTime(calMedians);
+  
+  // Compute targeted vs non-targeted improvement
+  let targetCalTimes = [];
+  let targetRetTimes = [];
+  let nonTargetCalTimes = [];
+  let nonTargetRetTimes = [];
+  
+  const bigramDetails = [];
+  
+  for (const [bg, calTime] of Object.entries(calMedians)) {
+    const retTime = retMedians[bg];
+    if (retTime === undefined) continue;
+    
+    if (targetSet.has(bg)) {
+      targetCalTimes.push(calTime);
+      targetRetTimes.push(retTime);
+      bigramDetails.push({ bigram: bg, calTime, retTime, targeted: true });
+    } else {
+      nonTargetCalTimes.push(calTime);
+      nonTargetRetTimes.push(retTime);
+    }
+  }
+  
+  const targetCalMedian = median(targetCalTimes);
+  const targetRetMedian = median(targetRetTimes);
+  const nonTargetCalMedian = median(nonTargetCalTimes);
+  const nonTargetRetMedian = median(nonTargetRetTimes);
+  
+  const targetImprovement = targetCalMedian > 0 ? ((targetCalMedian - targetRetMedian) / targetCalMedian * 100) : 0;
+  const nonTargetImprovement = nonTargetCalMedian > 0 ? ((nonTargetCalMedian - nonTargetRetMedian) / nonTargetCalMedian * 100) : 0;
+  const differentialImprovement = targetImprovement - nonTargetImprovement;
+  
+  // WPM calculations
+  const calWpm = computePhaseWpm('calibration');
+  const retWpm = computePhaseWpm('retest');
+  const wpmChange = retWpm - calWpm;
+  
+  // Oversampling ratio
+  const calText = CALIBRATION_PASSAGES.join(' ');
+  const trainText = state.trainingPassages.join(' ');
+  const calBigrams = getBigrams(calText);
+  const trainBigrams = getBigrams(trainText);
+  const calTotal = Object.values(calBigrams).reduce((a,b) => a+b, 0);
+  const trainTotal = Object.values(trainBigrams).reduce((a,b) => a+b, 0);
+  
+  let oversampleRatios = [];
+  for (const b of state.targetBigrams) {
+    const calFreq = (calBigrams[b.bigram] || 0) / calTotal;
+    const trainFreq = (trainBigrams[b.bigram] || 0) / trainTotal;
+    const ratio = calFreq > 0 ? trainFreq / calFreq : (trainFreq > 0 ? 999 : 0);
+    oversampleRatios.push({ bigram: b.bigram, calFreq, trainFreq, ratio });
+  }
+  const medianOversample = median(oversampleRatios.map(o => o.ratio));
+  
+  // Criteria evaluation
+  const slowBigramsAboveThreshold = state.targetBigrams.filter(b => b.time >= calOverall * 1.5).length;
+  const crit1Pass = slowBigramsAboveThreshold >= 15;
+  const crit2Pass = medianOversample >= 3;
+  const crit3Pass = targetImprovement >= 10 && differentialImprovement >= 5;
+  
+  // Bigram detail table
+  bigramDetails.sort((a, b) => (b.calTime - b.retTime) - (a.calTime - a.retTime));
+  let detailRows = bigramDetails.map(d => {
+    const change = ((d.calTime - d.retTime) / d.calTime * 100);
+    const cls = change > 0 ? 'improved' : 'worsened';
+    return `<tr><td style="font-weight:bold">${d.bigram}</td><td>${Math.round(d.calTime)} ms</td><td>${Math.round(d.retTime)} ms</td><td class="${cls}">${change > 0 ? '+' : ''}${change.toFixed(1)}%</td></tr>`;
+  }).join('');
+  
+  // Build results data for export
+  const exportData = {
+    timestamp: new Date().toISOString(),
+    calWpm, retWpm, wpmChange,
+    targetCalMedian: Math.round(targetCalMedian),
+    targetRetMedian: Math.round(targetRetMedian),
+    targetImprovement: targetImprovement.toFixed(1),
+    nonTargetCalMedian: Math.round(nonTargetCalMedian),
+    nonTargetRetMedian: Math.round(nonTargetRetMedian),
+    nonTargetImprovement: nonTargetImprovement.toFixed(1),
+    differentialImprovement: differentialImprovement.toFixed(1),
+    medianOversample: medianOversample.toFixed(1),
+    slowBigramsAboveThreshold,
+    crit1Pass, crit2Pass, crit3Pass,
+    targetBigrams: state.targetBigrams,
+    bigramDetails
+  };
+  
+  app.innerHTML = `
+    <div class="phase-label">Results</div>
+    
+    <div style="text-align:center;margin-bottom:1.5rem">
+      <div class="metric-card">
+        <div class="label">Calibration WPM</div>
+        <div class="value">${calWpm}</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Retest WPM</div>
+        <div class="value">${retWpm}</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">WPM Change</div>
+        <div class="value ${wpmChange >= 0 ? 'pass' : 'fail'}">${wpmChange >= 0 ? '+' : ''}${wpmChange}</div>
+      </div>
+    </div>
+    
+    <div class="results-section">
+      <h3>Evaluation Criteria</h3>
+      
+      <div class="criteria-result ${crit1Pass ? 'pass' : 'fail'}">
+        <strong>Criterion 1 — Bigram Detection:</strong> ${slowBigramsAboveThreshold}/20 bigrams at ≥1.5x overall median.
+        Need ≥15. ${crit1Pass ? '✅ PASS' : '❌ FAIL'}
+      </div>
+      
+      <div class="criteria-result ${crit2Pass ? 'pass' : 'fail'}">
+        <strong>Criterion 2 — Oversampling:</strong> Median oversample ratio: ${medianOversample.toFixed(1)}x.
+        Need ≥3x. ${crit2Pass ? '✅ PASS' : '❌ FAIL'}
+      </div>
+      
+      <div class="criteria-result ${crit3Pass ? 'pass' : 'fail'}">
+        <strong>Criterion 3 — Targeted Improvement:</strong> Targeted bigrams improved ${targetImprovement.toFixed(1)}% (need ≥10%). Differential vs. non-targeted: ${differentialImprovement.toFixed(1)}pp (need ≥5pp).
+        ${crit3Pass ? '✅ PASS' : '❌ FAIL'}
+      </div>
+    </div>
+    
+    <div class="results-section">
+      <h3>Improvement Breakdown</h3>
+      <div style="text-align:center;margin-bottom:1rem">
+        <div class="metric-card">
+          <div class="label">Targeted Bigrams</div>
+          <div class="value ${targetImprovement > 0 ? 'pass' : 'fail'}">${targetImprovement.toFixed(1)}%</div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Non-Targeted Bigrams</div>
+          <div class="value">${nonTargetImprovement.toFixed(1)}%</div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Differential</div>
+          <div class="value ${differentialImprovement >= 5 ? 'pass' : 'fail'}">${differentialImprovement.toFixed(1)}pp</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="results-section">
+      <h3>Targeted Bigram Details (Before → After)</h3>
+      <table>
+        <tr><th>Bigram</th><th>Calibration</th><th>Retest</th><th>Change</th></tr>
+        ${detailRows}
+      </table>
+    </div>
+    
+    <button class="copy-btn" onclick='copyResults(${JSON.stringify(JSON.stringify(exportData))})'>📋 Copy Results JSON</button>
+    <button class="btn" onclick="location.reload()">Start Over</button>
+  `;
+  
+  // Save to localStorage
+  try {
+    const prev = JSON.parse(localStorage.getItem('retrotype_results') || '[]');
+    prev.push(exportData);
+    localStorage.setItem('retrotype_results', JSON.stringify(prev));
+  } catch(e) {}
+}
+
+function computePhaseWpm(phase) {
+  const logs = state.phaseKeystrokeLogs[phase];
+  if (!logs || logs.length === 0) return 0;
+  let totalChars = 0;
+  let totalTime = 0;
+  for (const log of logs) {
+    if (log.length < 2) continue;
+    totalChars += log.length;
+    totalTime += log[log.length - 1].time - log[0].time;
+  }
+  if (totalTime === 0) return 0;
+  const minutes = totalTime / 1000 / 60;
+  const words = totalChars / 5;
+  return Math.round(words / minutes);
+}
+
+// ============================================================
+// EVENT HANDLERS
+// ============================================================
+function handleKeydown(e) {
+  // Ignore modifier keys, tab, etc.
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'Tab' || e.key === 'Escape') return;
+  if (e.key === 'Shift' || e.key === 'CapsLock' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') return;
+  
+  e.preventDefault();
+  
+  const text = state.passages[state.passageIndex];
+  if (state.charIndex >= text.length) return;
+  
+  // Handle backspace
+  if (e.key === 'Backspace') {
+    if (state.charIndex > 0) {
+      state.charIndex--;
+      state.keystrokeLog.pop();
+    }
+    render();
+    return;
+  }
+  
+  // Only process printable characters
+  if (e.key.length !== 1) return;
+  
+  const now = performance.now();
+  
+  // Start timer on first keystroke
+  if (state.charIndex === 0 && state.keystrokeLog.length === 0) {
+    state.phaseStartTime = now;
+  }
+  
+  const expected = text[state.charIndex];
+  const correct = e.key === expected;
+  
+  state.keystrokeLog.push({
+    char: expected,
+    typed: e.key,
+    correct,
+    time: now
+  });
+  
+  state.charIndex++;
+  
+  // Check if passage complete
+  if (state.charIndex >= text.length) {
+    finishPassage();
+    return;
+  }
+  
+  render();
+}
+
+function finishPassage() {
+  const phase = state.phase;
+  
+  // Store the keystroke log for this passage
+  if (!state.phaseKeystrokeLogs[phase]) state.phaseKeystrokeLogs[phase] = [];
+  state.phaseKeystrokeLogs[phase].push([...state.keystrokeLog]);
+  
+  // Move to next passage or next phase
+  state.passageIndex++;
+  state.charIndex = 0;
+  state.keystrokeLog = [];
+  state.lastKeyTime = null;
+  state.lastChar = null;
+  state.phaseStartTime = 0;
+  
+  if (state.passageIndex >= state.passages.length) {
+    // Phase complete
+    if (phase === 'calibration') {
+      // Compute bigram timings
+      state.bigramTimings = computeBigramMedians(state.phaseKeystrokeLogs.calibration);
+      state.targetBigrams = findSlowestBigrams(state.bigramTimings, 20);
+      state.phase = 'analysis';
+    } else if (phase === 'training') {
+      state.trainingBigramTimings = computeBigramMedians(state.phaseKeystrokeLogs.training);
+      state.phase = 'retest';
+      state.passages = RETEST_PASSAGES;
+      state.passageIndex = 0;
+    } else if (phase === 'retest') {
+      state.retestBigramTimings = computeBigramMedians(state.phaseKeystrokeLogs.retest);
+      state.phase = 'results';
+    }
+  }
+  
+  render();
+}
+
+// ============================================================
+// PHASE TRANSITIONS
+// ============================================================
+function startCalibration() {
+  state.phase = 'calibration';
+  state.passages = CALIBRATION_PASSAGES;
+  state.passageIndex = 0;
+  state.charIndex = 0;
+  state.keystrokeLog = [];
+  state.phaseKeystrokeLogs = { calibration: [], training: [], retest: [] };
+  render();
+}
+
+function startTraining() {
+  state.trainingPassages = generateTrainingPassages(state.targetBigrams, 5);
+  state.phase = 'training';
+  state.passages = state.trainingPassages;
+  state.passageIndex = 0;
+  state.charIndex = 0;
+  state.keystrokeLog = [];
+  render();
+}
+
+function copyResults(jsonStr) {
+  navigator.clipboard.writeText(jsonStr).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => btn.textContent = '📋 Copy Results JSON', 2000);
+  });
+}
+
+// ============================================================
+// INIT
+// ============================================================
+render();
+</script>
+</body>
+</html>
